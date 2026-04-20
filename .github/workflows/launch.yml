@@ -25,6 +25,14 @@ jobs:
           echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
 
+      - name: Get Image ID
+        id: get_image
+        run: |
+          IMAGE_ID=$(curl -s --key ~/.oci/oci_api_key.pem \
+            "https://iaas.${{ secrets.OCI_REGION }}.oraclecloud.com/20160918/images?compartmentId=${{ secrets.OCI_COMPARTMENT_ID }}&operatingSystem=Canonical%20Ubuntu&operatingSystemVersion=22.04%20Minimal%20aarch64&shape=VM.Standard.A1.Flex&lifecycleState=AVAILABLE&sortBy=TIMECREATED&sortOrder=DESC&limit=1" \
+            | python3 -c "import sys,json; data=json.load(sys.stdin); print(data[0]['id'])")
+          echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+
       - name: Create .env
         env:
           OCI_SSH_PUBLIC_KEY: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
@@ -43,9 +51,8 @@ jobs:
             "OCI_OCPUS": "4",
             "OCI_MEMORY_IN_GBS": "24",
             "OCI_SHAPE": "VM.Standard.A1.Flex",
+            "OCI_IMAGE_ID": "${{ steps.get_image.outputs.image_id }}",
             "OCI_SSH_PUBLIC_KEY": os.environ["OCI_SSH_PUBLIC_KEY"],
-            "OCI_OPERATING_SYSTEM": "Canonical Ubuntu",
-            "OCI_OPERATING_SYSTEM_VERSION": "22.04 Minimal aarch64",
           }
           with open(".env", "w") as f:
             for k, v in config.items():
