@@ -19,19 +19,37 @@ jobs:
       - name: Install dependencies
         run: composer install --no-dev
 
-      - name: Create OCI config
+      - name: Setup OCI CLI
         run: |
+          pip install oci-cli --quiet
           mkdir -p ~/.oci
           echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
+          cat > ~/.oci/config << EOF
+          [DEFAULT]
+          user=${{ secrets.OCI_USER_ID }}
+          fingerprint=${{ secrets.OCI_KEY_FINGERPRINT }}
+          tenancy=${{ secrets.OCI_TENANCY_ID }}
+          region=${{ secrets.OCI_REGION }}
+          key_file=/home/runner/.oci/oci_api_key.pem
+          EOF
 
       - name: Get Image ID
         id: get_image
         run: |
-          IMAGE_ID=$(curl -s --key ~/.oci/oci_api_key.pem \
-            "https://iaas.${{ secrets.OCI_REGION }}.oraclecloud.com/20160918/images?compartmentId=${{ secrets.OCI_COMPARTMENT_ID }}&operatingSystem=Canonical%20Ubuntu&operatingSystemVersion=22.04%20Minimal%20aarch64&shape=VM.Standard.A1.Flex&lifecycleState=AVAILABLE&sortBy=TIMECREATED&sortOrder=DESC&limit=1" \
-            | python3 -c "import sys,json; data=json.load(sys.stdin); print(data[0]['id'])")
+          IMAGE_ID=$(oci compute image list \
+            --compartment-id ${{ secrets.OCI_COMPARTMENT_ID }} \
+            --operating-system "Canonical Ubuntu" \
+            --operating-system-version "22.04 Minimal aarch64" \
+            --shape VM.Standard.A1.Flex \
+            --lifecycle-state AVAILABLE \
+            --sort-by TIMECREATED \
+            --sort-order DESC \
+            --limit 1 \
+            --query 'data[0].id' \
+            --raw-output)
           echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+          echo "Found image: $IMAGE_ID"
 
       - name: Create .env
         env:
